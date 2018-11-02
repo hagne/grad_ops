@@ -6,8 +6,11 @@ from IPython.display import display
 from ipywidgets import widgets
 import pandas as pd
 
+from QCbaselinePY import qcbaseline
+
 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-colorcyc = itertools.cycle(colors)
+
+get_color_cycler = lambda: itertools.cycle(colors)
 
 view_dict =  {'rad': {'DW_long':  ['DownwellingLongwave[Wm-2]'],
                       'DW_short': ['DownwellingShortwave[Wm-2]', 'DiffuseBW[Wm-2]', 'DirectNormal[Wm-2]', 'DirectNormal2[Wm-2]'],
@@ -24,7 +27,8 @@ view_dict =  {'rad': {'DW_long':  ['DownwellingLongwave[Wm-2]'],
                                           'sp02_1050[nm]',
                                           'sp02_610[nm]',
                                           'sp02_778[nm]',],
-                       'sp02_status': ['Albedo']},
+                       # 'sp02_status': ['Albedo']
+                       },
               'snow_soil': {'snowdepth':['SnowDepth[mm]'],
                             'soiltemp': ['Therm5[deg C]',
                                         'Therm10[deg C]',
@@ -36,20 +40,25 @@ view_dict =  {'rad': {'DW_long':  ['DownwellingLongwave[Wm-2]'],
                                         'Therm70[deg C]',
                                         'Therm95[deg C]',
                                         'Therm120[deg C]',]},
+              'met': {'pressure': ['Pressure[mb]'],
+                      'air_temp': ['AirTemp[deg C]'],
+                      'RH': ['RH[%]'],
+                      'wind_speed': ['Wspd[m/s]'],
+                      'wind_direct': ['Wdir[Deg]']}
              }
 
 
 prop_dict ={'DownwellingShortwave[Wm-2]': {'ylim' : None},
-            'DownwellingLongwave[Wm-2]': {'ylim' : (100,400)},
-            'DLcase[degC]': {'ylim' : (-50, 50)},
-            'DLdome[deg C]': {'ylim' : None},
+            'DownwellingLongwave[Wm-2]': {'ylim' : (100,450)},
+            'DLcase[degC]': {'ylim' : (-30, 30)},
+            'DLdome[deg C]': {'ylim' : (-30, 30)},
             'UpwellingShortwave[Wm-2]': {'ylim' : None},
             'UpwellingLongwave[Wm-2]': {'ylim' : None},
-            'ULcase[deg C]': {'ylim' : None},
-            'ULdome[deg C]': {'ylim' : None},
-            'DiffuseBW[Wm-2]': {'ylim' : None},
-            'DirectNormal[Wm-2]': {'ylim' : None},
-            'DirectNormal2[Wm-2]': {'ylim' : None},
+            'ULcase[deg C]': {'ylim' : (-30, 30)},
+            'ULdome[deg C]': {'ylim' : (-30, 30)},
+            'DiffuseBW[Wm-2]': {'ylim' : (0,1000)},
+            'DirectNormal[Wm-2]': {'ylim' : (0,1000)},
+            'DirectNormal2[Wm-2]': {'ylim' : (0,1000)},
             'sp02_412[nm]': {'ylim' : None},
             'sp02_500[nm]': {'ylim' : None},
             'sp02_675[nm]': {'ylim' : None},
@@ -70,16 +79,58 @@ prop_dict ={'DownwellingShortwave[Wm-2]': {'ylim' : None},
             'Therm95[deg C]': {'ylim' : None},
             'Therm120[deg C]': {'ylim' : None},
             'SZA': {'ylim' : None},
-            'Albedo': {'ylim' : None},}
+            'Albedo': {'ylim' : None},
+            'Pressure[mb]': {'ylim' : None},
+            'AirTemp[deg C]': {'ylim' : None},
+            'RH[%]': {'ylim' : None},
+            'Wspd[m/s]': {'ylim' : None},
+            'Wdir[Deg]': {'ylim' : None},
+            # : {'ylim' : None},
+            # : {'ylim' : None},
+            # : {'ylim' : None},
+            }
 
+folder_dict = {'ber': '/Volumes/grad/gradobs/scaled/ber/2018/',
+               'brw': '/Volumes/grad/gradobs/scaled/brw/2018/',
+               'kwj': '/Volumes/grad/gradobs/scaled/kwj/2018/',
+               'mlo': '/Volumes/grad/gradobs/scaled/mlo/2018/',
+               'smo': '/Volumes/grad/gradobs/scaled/smo/2018/',
+               'spo': '/Volumes/grad/gradobs/scaled/spo/2018/',
+               'sum': '/Volumes/grad/gradobs/scaled/sum/2018/'}
 
 class QcView(object):
-    def __init__(self, qc):
-        self.qc = qc
+    def __init__(self, station = 'ber', verbose = False):
+        self._plotview = None
+        # self.current_station = station
+        # self._qc = qcbaseline.QC(folder_dict[station])
+        self._verbose = verbose
         self._view_dict = None
-        for key in self.view_dict:
-            setattr(self, key, QcViewFigure(self, self.view_dict[key]))
-        self._update_plot = None
+        self.qc = station
+        self.controlls = QcViewControlls(self)
+
+    @property
+    def plotview(self):
+        if isinstance(self._plotview, type(None)):
+            self._plotview = QcViewPlotter(self)
+        return self._plotview
+
+    @property
+    def qc(self):
+        # if isinstance(self._qc, type(None)):
+        #     self._qc = qcbaseline.QC(folder_dict[self.current_station])
+        return self._qc
+
+    @qc.setter
+    def qc(self, station):
+        if not station in folder_dict.keys():
+            raise ValueError('{} is not a designated station. Pick one from the following list: {}'.format(station, ','.join(folder_dict.keys())))
+        self.current_station = station
+        self._qc = qcbaseline.QC(folder_dict[station])
+        if self._verbose:
+            print('just updated qc')
+        self._view_dict = None
+        self.plotview.update()
+
 
     @property
     def view_dict(self):
@@ -110,13 +161,45 @@ class QcView(object):
             self._view_dict = view_dict_cleaned
         return self._view_dict
 
+class QcViewPlotter(object):
+    def __init__(self, parent, verbose = False):
+        self._update_plot = None
+        self._update_a = None
+        self._update_kwargs = None
+
+        self._verbose = verbose
+        self.view = parent
+        self._a = None
+        self._f = None
+        # self.qc = parent.qc
+        self.update_groups()
+
+    def update_groups(self):
+        for key in self.view.view_dict:
+            setattr(self, key, QcViewFigure(self, self.view.view_dict[key]))
+
+        self._update_plot = None
+
+    def plot(self, para_group = 'rad'):
+        if isinstance(self._f, type(None)):
+            self._f = plt.figure()
+        else:
+            self._f.clear()
+
+        current_figure = getattr(self, para_group)
+        current_figure.plot(fig = self._f)
+
     def _callback(self, plot, a, **kwargs):
         self._update_plot = plot
         self._update_a = a
         self._update_kwargs = kwargs
 
     def update(self):
-        if isinstance(self._update_a, (list, np.ndarray)):
+        if isinstance(self._update_plot, type(None)):
+            print('no update')
+            return
+
+        elif isinstance(self._update_a, (list, np.ndarray)):
             ylim = []
             for a in self._update_a:
                 ylim.append(a.get_ylim())
@@ -132,28 +215,48 @@ class QcView(object):
         else:
             self._update_a.set_ylim(ylim)
 
+        if self._verbose:
+            print('just updated plotview')
+
 
 class QcViewFigure(object):
     def __init__(self, parent, fig_dict):
         self._parent = parent
-        self.qc = parent.qc
+        self.view = parent.view
+        # self.qc = parent.qc
         self.fig_dict = fig_dict
         self.ax_dict = {}
         for key in fig_dict:
             setattr(self, key, QcViewAxis(self, fig_dict[key]))
             self.ax_dict[key] = getattr(self, key)
 
-    def plot(self, axlist=None, schnickschnack=True):
+    def plot(self, axlist=None, fig = None, schnickschnack=True):
 
         if isinstance(axlist, type(None)):
             no_of_axis = len(self.fig_dict)
-            self.f, self.a = plt.subplots(no_of_axis, sharex=True, gridspec_kw={'hspace': 0})
-            self.f.set_figheight(self.f.get_figheight() * 0.4)
-            self.f.set_figheight(self.f.get_figheight() * no_of_axis)
+            if isinstance(fig, type(None)):
+                self.f, self.a = plt.subplots(no_of_axis, sharex=True, gridspec_kw={'hspace': 0})
+            else:
+                self.f = fig
+                self.a = fig.subplots(no_of_axis, sharex=True, gridspec_kw={'hspace': 0})
+
+            self.f.set_figheight(plt.rcParams['figure.figsize'][1] * 1.5)
+            # self.f.set_figheight(self.f.get_figheight() * no_of_axis)
+            self.f.set_figwidth(plt.rcParams['figure.figsize'][0] * 1.5)
+
+        if not isinstance(self.a, (list, np.ndarray)):
+            self.a = [self.a]
+
+        self._parent._f, self._parent._a = self.f, self.a
+
         for e, key in enumerate(self.ax_dict):
             qcax = self.ax_dict[key]
             ax = self.a[e]
             qcax.plot(ax=ax, schnickschnack=True)
+
+        for at in self.a:
+            at.yaxis.set_major_locator(plt.MaxNLocator(prune='both'))
+
         self._parent._callback(self.plot, self.a, schnickschnack=False)
 
 
@@ -161,7 +264,8 @@ class QcViewAxis(object):
     def __init__(self, parent, para_list):
         self._parent = parent
         self.para_list = para_list
-        self.qc = parent.qc
+        self.view = parent.view
+        # self.qc = parent.qc
         self._param_dict = {}
         for para in self.para_list:
             name = para.split('[')[0]
@@ -173,16 +277,19 @@ class QcViewAxis(object):
             self.f, self.a = plt.subplots()
         else:
             self.a = ax
+            # self.f = self.a.get_figure()
+        colorcyc = get_color_cycler()
         for e, para in enumerate(self._param_dict):
             lastparam = self._param_dict[para]
-            lastparam.plot(ax=self.a, color=colors[e], schnickschnuck=False)
+            lastparam.plot(ax=self.a, color=next(colorcyc), schnickschnuck=False)
 
         lastparam.update_xlim()
         lastparam.grayout_current_day()
 
         if schnickschnack:
             lastparam.update_ylim()
-            self.a.legend()
+            self.a.legend(fontsize = 'x-small')
+            # self.f.autofmt_xdate()
             self._parent._parent._callback(self.plot, self.a, schnickschnack=False)
         #         else:
         #             self.a.set_ylim(ylim)
@@ -192,7 +299,8 @@ class QcViewAxis(object):
 class QcViewParameter(object):
     def __init__(self, parent, para):
         self._parent = parent
-        self.qc = parent.qc
+        # self.qc = parent.qc
+        self.view = parent.view
         self.para = para
 
     def plot(self, ax=None, color=None, schnickschnuck=True):
@@ -200,32 +308,39 @@ class QcViewParameter(object):
             self.f, self.a = plt.subplots()
         else:
             self.a = ax
+            self.f = self.a.get_figure()
         if isinstance(color, type(None)):
             color = colors[0]
 
-        alpha = 0.5
-        self.qc.current_day.dataobject.iloc[0].thedata[self.para].plot(ax=ax, color=color)
-        if not isinstance(self.qc.previous_day, type(None)):
-            self.qc.previous_day.dataobject.iloc[0].thedata[self.para].plot(ax=ax, color=color, alpha=alpha,
-                                                                            label='_nolegend_')
-        if not isinstance(self.qc.next_day, type(None)):
-            self.qc.next_day.dataobject.iloc[0].thedata[self.para].plot(ax=ax, color=color, alpha=alpha,
-                                                                        label='_nolegend_')
+        alpha = 1
+        try:
+            self.view.qc.current_day.dataobject.iloc[0].thedata[self.para].plot(ax=ax, color=color, linewidth = 0.5, marker = '.')
+        except TypeError:
+            print('The parameter {} does not contain any data'.format(self.para))
+            return
+
+        if not isinstance(self.view.qc.previous_day, type(None)):
+            self.view.qc.previous_day.dataobject.iloc[0].thedata[self.para].plot(ax=ax, color=color, alpha=alpha,
+                                                                            label='_nolegend_', linewidth = 0.5, marker = '.')
+        if not isinstance(self.view.qc.next_day, type(None)):
+            self.view.qc.next_day.dataobject.iloc[0].thedata[self.para].plot(ax=ax, color=color, alpha=alpha,
+                                                                        label='_nolegend_', linewidth = 0.5, marker = '.')
         if schnickschnuck:
             self.update_xlim()
             self.grayout_current_day()
             self.update_ylim()
+            # self.f.autofmt_xdate()
             self._parent._parent._parent._callback(self.plot, self.a, color=color, schnickschnuck=False)
 
         return self.a
 
     def grayout_current_day(self):
-        self.a.axvspan(self.qc.current_day.date.iloc[0], self.qc.current_day.date.iloc[0] + pd.to_timedelta(1, 'D'),
+        self.a.axvspan(self.view.qc.current_day.date.iloc[0], self.view.qc.current_day.date.iloc[0] + pd.to_timedelta(1, 'D'),
                        color='0.95')
 
-    def update_xlim(self, margins=3):
-        start = self.qc.current_day.date.iloc[0] - pd.to_timedelta(margins, 'h')
-        end = self.qc.current_day.date.iloc[0] + pd.to_timedelta(24 + margins, 'h')
+    def update_xlim(self, margins=24):
+        start = self.view.qc.current_day.date.iloc[0] - pd.to_timedelta(margins, 'h')
+        end = self.view.qc.current_day.date.iloc[0] + pd.to_timedelta(24, 'h')
         self.a.set_xlim(start, end)
 
     def update_ylim(self):
@@ -234,25 +349,80 @@ class QcViewParameter(object):
             self.a.set_ylim(lim)
 
 
-class Controlls(object):
-    def __init__(self, qc, plotview):
-        self.qc = qc
-        self.plotview = plotview
+class QcViewControlls(object):
+    def __init__(self,
+                 parent,
+                 # qc,
+                 # plotview
+                 ):
+        self.view = parent
+        self.current_station = parent.current_station
+        # self.qc = parent.qc
+        self.plotview = parent.plotview
 
+    # def update(self):
+    #     dr
+
+    def show(self):
+    # next/previous day
         button_next_day = widgets.Button(description='next day')
         button_prev_day = widgets.Button(description='previous day')
-
-        display(button_next_day)
-        display(button_prev_day)
 
         button_next_day.on_click(self.on_button_next_day)
         button_prev_day.on_click(self.on_button_previous_day)
 
+        box_day = widgets.Box([button_prev_day, button_next_day])
+        display(box_day)
+    # box
+    ## select site
+        dropdown_sites = widgets.Dropdown(
+                                options=folder_dict.keys(),#'ber', 'brw', 'kwj', 'mlo', 'smo', 'spo', 'sum'],
+                                value=self.current_station,
+                                description='Site',
+                                disabled=False,
+                            )
+        # display(dropdown_sites)
+        dropdown_sites.observe(self.observe_dropdown_sites)
+
+    ## select parameter group
+        dropdown_para_group = widgets.Dropdown(
+                                options=self.view.view_dict.keys(),#'ber', 'brw', 'kwj', 'mlo', 'smo', 'spo', 'sum'],
+                                value=list(self.view.view_dict.keys())[0],
+                                description='parameter group',
+                                disabled=False,
+                            )
+        # display(dropdown_para_group)
+        dropdown_para_group.observe(self.observe_dropdown_para_group)
+
+        self.dropdown_para_group = dropdown_para_group
+
+        boxII = widgets.Box([dropdown_sites, dropdown_para_group])
+        display(boxII)
+
+
+
+    def observe_dropdown_para_group(self, evt):
+        if evt['name'] == 'value':
+            self.view.plotview.plot(evt['new'])
+        pass
+
+    def observe_dropdown_sites(self, evt):
+        if evt['name'] == 'value':
+            self.dropdown_para_group.index = False
+            self.view.qc = evt['new']
+            self.view.plotview.update_groups()
+            self.update_dropdown_para_group()
+
+    def update_dropdown_para_group(self):
+        self.dropdown_para_group.index = False
+        self.dropdown_para_group.options = self.view.view_dict.keys()
+        self.dropdown_para_group.value = list(self.view.view_dict.keys())[0]
+
     def on_button_next_day(self, evt):
         #     try:
-        self.qc.shift2next_day()
+        self.view.qc.shift2next_day()
         self.plotview.update()
 
     def on_button_previous_day(self, evt):
-        self.qc.shift2previous_day()
+        self.view.qc.shift2previous_day()
         self.plotview.update()

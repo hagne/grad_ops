@@ -5,7 +5,7 @@ import pandas as pd
 
 class QC(object):
     def __init__(self, folder_path = '/Users/htelg/data/baseline/scaled/brw/2018/',
-                 num_files_to_be_opened = 1,
+                 num_files_to_be_opened = 3,
                  verbose = False):
 
         self.folder_path = folder_path
@@ -59,7 +59,7 @@ class QC(object):
     def shift2next_day(self):
         df_files = self._data
         other = self.next_day
-        if other.shape[0] == 0:
+        if isinstance(other, type(None)):
             print('You see the newest file availble')
         else:
             self.adjust_should_be_opened(df_files[df_files.should_be_open == 1].index.values[0])
