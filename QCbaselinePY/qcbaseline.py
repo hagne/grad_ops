@@ -5,8 +5,10 @@ import pandas as pd
 
 class QC(object):
     def __init__(self, folder_path = '/Users/htelg/data/baseline/scaled/brw/2018/',
+                 folder_path_raw='/Volumes/grad/gradobs/raw/ber/2018/',
                  num_files_to_be_opened = 3,
-                 verbose = False):
+                 verbose = False,
+                 view = None):
 
         self.folder_path = folder_path
         self._verbose = verbose
@@ -15,14 +17,27 @@ class QC(object):
         fldpath = Path(folder_path)
         l = [fp for fp in fldpath.iterdir() if fp.is_file()]
         l.sort()
+        self.last_file = l[-1]
         df_files = pd.DataFrame(l, columns = ['file_name'])
         df_files['dataobject'] = [type('DataObject', (object,), {'thedata' :None})() for i in range(len(df_files))]
         self._data = df_files
         self._data['date'] = pd.to_datetime(self._data.file_name.apply(lambda x: x.name.split('.')[2]))
 
+        # raw
+        lraw = [f for f in Path(folder_path_raw).iterdir() if ('.dat' in f.name) and f.is_file()]
+        lraw.sort()
+        self.last_file_raw = lraw[-1]
+
         idx_open = self._data.index[-1]
         self.adjust_should_be_opened(idx_open)
         self.open_required_files()
+        self.view = view
+
+    @property
+    def time_diff_processed_raw(self):
+        traw = pd.to_datetime(self.last_file_raw.stat().st_mtime, unit='s')
+        tproc = pd.to_datetime(self.last_file.stat().st_mtime, unit= 's')
+        return tproc - traw
 
     def read_file(self, fname = '/Users/htelg/data/baseline/scaled/brw/2018/gradobs.brw.20180102.txt'):
         df = pd.read_csv(fname, sep='\t',
@@ -60,7 +75,11 @@ class QC(object):
         df_files = self._data
         other = self.next_day
         if isinstance(other, type(None)):
-            print('You see the newest file availble')
+            txt = 'You see the newest file availble'
+            if isinstance(self.view, type(None)):
+                print(txt)
+            else:
+                self.view.send_message(txt)
         else:
             self.adjust_should_be_opened(df_files[df_files.should_be_open == 1].index.values[0])
             self.open_required_files()
